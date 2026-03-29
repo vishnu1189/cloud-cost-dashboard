@@ -113,7 +113,7 @@
     <div class="container">
         <div class="hero">
             <h1>Cloud Cost Anomaly Dashboard</h1>
-            <p>Upload billing data, detect unusual cloud spending, and view cost anomalies with severity, explanations, currency conversion, risk insights, AI-generated summaries, and external cloud job market insights.</p>
+            <p>Upload billing data, detect unusual cloud spending, and view cost anomalies with severity, explanations, currency conversion, risk insights, AI-generated summaries, external cloud job market insights, and MapReduce-based service aggregation.</p>
         </div>
 
         <div class="tabs">
@@ -162,6 +162,34 @@
                     <div class="summary-card"><h3>Medium Severity</h3><p>{{ result.summary.severity_breakdown.medium }}</p></div>
                     <div class="summary-card"><h3>Low Severity</h3><p>{{ result.summary.severity_breakdown.low }}</p></div>
                 </div>
+
+                {% if result.mapreduce_summary %}
+                <div class="card">
+                    <h2>MapReduce Service Summary</h2>
+                    <div class="table-wrapper">
+                        <table style="min-width: 700px;">
+                            <thead>
+                                <tr>
+                                    <th>Service</th>
+                                    <th>Total Cost (USD)</th>
+                                    <th>Record Count</th>
+                                    <th>Average Cost (USD)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in result.mapreduce_summary %}
+                                <tr>
+                                    <td>{{ item.service }}</td>
+                                    <td>{{ item.total_cost_usd }}</td>
+                                    <td>{{ item.record_count }}</td>
+                                    <td>{{ item.average_cost_usd }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
 
                 {% if result.anomalies %}
                 <div class="card">

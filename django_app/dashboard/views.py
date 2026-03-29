@@ -3,9 +3,54 @@ import requests
 import pandas as pd
 import json
 from django.http import JsonResponse
+from concurrent.futures import ThreadPoolExecutor
 from django.views.decorators.csrf import csrf_exempt
 from .anomaly import detect_anomalies
 from .utils import get_usd_to_eur_rate, get_risk_label, generate_ai_summary
+
+
+def enrich_anomaly(item, usd_to_eur_rate):
+    item["actual_cost_eur"] = round(item["actual_cost_usd"] * usd_to_eur_rate, 2)
+    item["expected_cost_eur"] = round(item["expected_cost_usd"] * usd_to_eur_rate, 2)
+    item["risk_label"] = get_risk_label(item["severity"])
+    item["ai_summary"] = generate_ai_summary(
+        service=item["service"],
+        expected_cost=item["expected_cost_usd"],
+        actual_cost=item["actual_cost_usd"],
+        spike_percentage=item["spike_percentage"],
+        severity=item["severity"],
+    )
+    return item
+
+
+def map_billing_records(df):
+    mapped = []
+    for _, row in df.iterrows():
+        mapped.append((row["service"], row["cost_usd"]))
+    return mapped
+
+
+def reduce_service_costs(mapped_data):
+    reduced = {}
+
+    for service, cost in mapped_data:
+        if service not in reduced:
+            reduced[service] = {
+                "service": service,
+                "total_cost_usd": 0,
+                "record_count": 0,
+            }
+
+        reduced[service]["total_cost_usd"] += cost
+        reduced[service]["record_count"] += 1
+
+    for service in reduced:
+        reduced[service]["total_cost_usd"] = round(reduced[service]["total_cost_usd"], 2)
+        reduced[service]["average_cost_usd"] = round(
+            reduced[service]["total_cost_usd"] / reduced[service]["record_count"], 2
+        )
+
+    return list(reduced.values())
 
 
 def build_response(df):
@@ -14,18 +59,13 @@ def build_response(df):
         return {"error": "Input must contain date, service, and cost_usd fields."}
 
     anomalies = detect_anomalies(df)
+    mapped_data = map_billing_records(df)
+    mapreduce_summary = reduce_service_costs(mapped_data)
     usd_to_eur_rate = get_usd_to_eur_rate()
 
-    for item in anomalies:
-        item["actual_cost_eur"] = round(item["actual_cost_usd"] * usd_to_eur_rate, 2)
-        item["expected_cost_eur"] = round(item["expected_cost_usd"] * usd_to_eur_rate, 2)
-        item["risk_label"] = get_risk_label(item["severity"])
-        item["ai_summary"] = generate_ai_summary(
-            service=item["service"],
-            expected_cost=item["expected_cost_usd"],
-            actual_cost=item["actual_cost_usd"],
-            spike_percentage=item["spike_percentage"],
-            severity=item["severity"],
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        anomalies = list(
+            executor.map(lambda item: enrich_anomaly(item, usd_to_eur_rate), anomalies)
         )
 
     total_flagged_cost_usd = round(
@@ -61,6 +101,7 @@ def build_response(df):
             "usd_to_eur_rate": round(usd_to_eur_rate, 4),
             "severity_breakdown": severity_counts,
         },
+        "mapreduce_summary": mapreduce_summary,
         "anomalies": anomalies,
     }
 
