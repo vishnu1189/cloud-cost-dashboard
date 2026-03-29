@@ -1,0 +1,276 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Cost Anomaly Dashboard</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; background: #f5f7fb; color: #1f2937; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 30px; }
+        .hero { background: linear-gradient(135deg, #0f172a, #2563eb); color: white; padding: 40px; border-radius: 20px; margin-bottom: 24px; }
+        .hero h1 { margin: 0 0 12px 0; font-size: 48px; }
+        .hero p { margin: 0; max-width: 750px; line-height: 1.6; font-size: 20px; }
+
+        .tabs {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .tab-btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            background: #e2e8f0;
+            color: #0f172a;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .tab-btn.active {
+            background: #2563eb;
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card { background: white; border-radius: 18px; padding: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); margin-bottom: 24px; }
+        input[type="file"], textarea, input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        button.submit-btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 14px 22px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .error { color: #dc2626; font-weight: bold; margin-top: 12px; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin-bottom: 24px; }
+        .summary-card { background: white; border-radius: 18px; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+        .summary-card h3 { margin: 0 0 10px 0; font-size: 16px; color: #475569; }
+        .summary-card p { margin: 0; font-size: 28px; font-weight: bold; color: #0f172a; }
+
+        table { width: 100%; border-collapse: collapse; min-width: 1400px; }
+        th, td { padding: 14px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
+        th { background: #f8fafc; }
+        .table-wrapper { overflow-x: auto; }
+
+        .severity-high { color: #dc2626; font-weight: bold; }
+        .severity-medium { color: #ea580c; font-weight: bold; }
+        .severity-low { color: #ca8a04; font-weight: bold; }
+
+        .empty-message {
+            background: #eff6ff;
+            color: #1d4ed8;
+            padding: 14px 18px;
+            border-radius: 10px;
+            margin-top: 16px;
+            font-weight: 600;
+        }
+
+        .section-title {
+            margin-bottom: 12px;
+            font-size: 18px;
+            color: #0f172a;
+        }
+
+        .job-skills-list {
+            margin: 8px 0 0 18px;
+            padding: 0;
+        }
+
+        .job-skills-list li {
+            margin-bottom: 6px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>Cloud Cost Anomaly Dashboard</h1>
+            <p>Upload billing data, detect unusual cloud spending, and view cost anomalies with severity, explanations, currency conversion, risk insights, AI-generated summaries, and external cloud job market insights.</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="openTab(event, 'cost-analysis')">Cost Analysis</button>
+            <button class="tab-btn" onclick="openTab(event, 'cloud-job-market')">Cloud Job Market</button>
+        </div>
+
+        <div id="cost-analysis" class="tab-content active">
+            <div class="card">
+                <div class="section-title"><strong>Upload CSV Billing File</strong></div>
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" name="mode" value="csv">
+                    <input type="file" name="csv_file" accept=".csv">
+                    <button class="submit-btn" type="submit">Analyse CSV</button>
+                </form>
+
+                <hr style="margin: 24px 0; border: none; border-top: 1px solid #e5e7eb;">
+
+                <div class="section-title"><strong>Paste JSON Billing Data</strong></div>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="mode" value="json">
+                    <textarea name="json_text" rows="10" placeholder='[{"date":"2025-03-01","service":"EC2","cost_usd":25}]'></textarea>
+                    <button class="submit-btn" type="submit">Analyse JSON</button>
+                </form>
+
+                {% if error %}
+                    <p class="error">{{ error }}</p>
+                {% endif %}
+
+                {% if result and result.summary.total_anomalies == 0 %}
+                    <div class="empty-message">Analysis completed successfully. No anomalies were detected.</div>
+                {% endif %}
+            </div>
+
+            {% if result and not result.error %}
+                <div class="summary-grid">
+                    <div class="summary-card"><h3>Total Records</h3><p>{{ result.summary.total_records }}</p></div>
+                    <div class="summary-card"><h3>Total Anomalies</h3><p>{{ result.summary.total_anomalies }}</p></div>
+                    <div class="summary-card"><h3>Highest Spike %</h3><p>{{ result.summary.highest_spike_percentage }}</p></div>
+                    <div class="summary-card"><h3>Flagged Cost (USD)</h3><p>{{ result.summary.total_flagged_cost_usd }}</p></div>
+                    <div class="summary-card"><h3>Flagged Cost (EUR)</h3><p>{{ result.summary.total_flagged_cost_eur }}</p></div>
+                    <div class="summary-card"><h3>USD to EUR Rate</h3><p>{{ result.summary.usd_to_eur_rate }}</p></div>
+                    <div class="summary-card"><h3>High Severity</h3><p>{{ result.summary.severity_breakdown.high }}</p></div>
+                    <div class="summary-card"><h3>Medium Severity</h3><p>{{ result.summary.severity_breakdown.medium }}</p></div>
+                    <div class="summary-card"><h3>Low Severity</h3><p>{{ result.summary.severity_breakdown.low }}</p></div>
+                </div>
+
+                {% if result.anomalies %}
+                <div class="card">
+                    <h2>Detected Anomalies</h2>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Service</th>
+                                    <th>Expected USD</th>
+                                    <th>Actual USD</th>
+                                    <th>Expected EUR</th>
+                                    <th>Actual EUR</th>
+                                    <th>Spike %</th>
+                                    <th>Severity</th>
+                                    <th>Risk Label</th>
+                                    <th>Explanation</th>
+                                    <th>AI Summary</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in result.anomalies %}
+                                <tr>
+                                    <td>{{ item.date }}</td>
+                                    <td>{{ item.service }}</td>
+                                    <td>{{ item.expected_cost_usd }}</td>
+                                    <td>{{ item.actual_cost_usd }}</td>
+                                    <td>{{ item.expected_cost_eur }}</td>
+                                    <td>{{ item.actual_cost_eur }}</td>
+                                    <td>{{ item.spike_percentage }}</td>
+                                    <td class="{% if item.severity == 'High' %}severity-high{% elif item.severity == 'Medium' %}severity-medium{% elif item.severity == 'Low' %}severity-low{% endif %}">{{ item.severity }}</td>
+                                    <td>{{ item.risk_label }}</td>
+                                    <td>{{ item.explanation }}</td>
+                                    <td>{{ item.ai_summary }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        <div id="cloud-job-market" class="tab-content">
+            <div class="card">
+                <h2>Cloud Job Market Insights</h2>
+                <p>This section uses an external classmate API to show current market insights for cloud-related roles.</p>
+
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="mode" value="job_market">
+
+                    <div class="form-grid">
+                        <div>
+                            <label><strong>Job Title</strong></label>
+                            <input type="text" name="job_title" value="{{ job_title|default:'Cloud Engineer' }}">
+                        </div>
+                        <div>
+                            <label><strong>Location</strong></label>
+                            <input type="text" name="location" value="{{ location|default:'London' }}">
+                        </div>
+                        <div>
+                            <label><strong>Country</strong></label>
+                            <input type="text" name="country" value="{{ country|default:'United Kingdom' }}">
+                        </div>
+                    </div>
+
+                    <button class="submit-btn" type="submit">Search Cloud Job Market</button>
+                </form>
+
+                <hr style="margin: 24px 0; border: none; border-top: 1px solid #e5e7eb;">
+
+                {% if friend_api_result.error %}
+                    <p class="error">Job market API error: {{ friend_api_result.error }}</p>
+                {% else %}
+                    <p><strong>Average Salary:</strong> {{ friend_api_result.avg_salary }}</p>
+                    <p><strong>Demand Score:</strong> {{ friend_api_result.demand_score }}</p>
+                    <p><strong>Summary:</strong> {{ friend_api_result.summary }}</p>
+                    <p><strong>Data Source:</strong> {{ friend_api_result.data_source }}</p>
+
+                    <p><strong>Top Skills:</strong></p>
+                    <ul class="job-skills-list">
+                        {% for skill in friend_api_result.top_skills %}
+                            <li>{{ skill }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openTab(event, tabId) {
+            const tabContents = document.getElementsByClassName("tab-content");
+            const tabButtons = document.getElementsByClassName("tab-btn");
+
+            for (let i = 0; i < tabContents.length; i++) {
+                tabContents[i].classList.remove("active");
+            }
+
+            for (let i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].classList.remove("active");
+            }
+
+            document.getElementById(tabId).classList.add("active");
+            event.currentTarget.classList.add("active");
+        }
+    </script>
+</body>
+</html>
